@@ -1,5 +1,6 @@
-import React, {useState} from 'react';
-import {View, Text, TextInput, TouchableOpacity, FlatList} from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, FlatList, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import styles from './Styles';
 import RenderItem from './RenderItem';
 
@@ -13,33 +14,72 @@ export default function App() {
   const [text, setText] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
 
+  useEffect(() => {
+    getData();
+  }, []);
+
+  const storeData = async (value: Task[]) => {
+    try {
+      await AsyncStorage.setItem('mytodo-tasks', JSON.stringify(value));
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  const getData = async () => {
+    try {
+      const value = await AsyncStorage.getItem('mytodo-tasks');
+      if (value !== null) {
+        const tasksLocal = JSON.parse(value);
+        setTasks(tasksLocal);
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
   const addTask = () => {
-    const tmp = [...tasks];
+    const taskExists = tasks.some(task => task.title === text.trim());
+
+    if (taskExists) {
+      Alert.alert('Tarea Duplicada', 'La tarea ya existe, por favor ingresa una nueva.');
+      return;
+    }
+
     const newTask = {
-      title: text,
+      title: text.trim(),
       done: false,
       date: new Date(),
     };
-    tmp.push(newTask);
+    const updatedTasks = [...tasks, newTask];
 
-    setTasks(tmp);
+    setTasks(updatedTasks);
+    storeData(updatedTasks);
     setText('');
   };
 
-  const markDone = (task: Task) => {
-    const tmp = [...tasks];
-    const index = tmp.findIndex(el => el.title === task.title);
-    const todo = tasks[index];
-
-    todo.done = !todo.done;
-    setTasks(tmp);
+  const confirmDeleteTask = (task: Task) => {
+    Alert.alert(
+      'Confirmar Eliminación',
+      `¿Estás seguro de eliminar la tarea "${task.title}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: () => deleteFunction(task) },
+      ],
+      { cancelable: true }
+    );
   };
 
   const deleteFunction = (task: Task) => {
-    const tmp = [...tasks];
-    const index = tmp.findIndex(el => el.title === task.title);
-    tmp.splice(index, 1);
-    setTasks(tmp);
+    const updatedTasks = tasks.filter(t => t.title !== task.title);
+    setTasks(updatedTasks);
+    storeData(updatedTasks);
+  };
+
+  const markDone = (task: Task) => {
+    const updatedTasks = tasks.map(t => t.title === task.title ? { ...t, done: !t.done } : t);
+    setTasks(updatedTasks);
+    storeData(updatedTasks);
   };
 
   return (
@@ -58,14 +98,15 @@ export default function App() {
       </View>
       <View style={styles.scrollContainer}>
         <FlatList
-          renderItem={({item}) => (
+          data={tasks}
+          renderItem={({ item }) => (
             <RenderItem
               item={item}
-              deleteFunction={deleteFunction}
+              deleteFunction={() => confirmDeleteTask(item)}
               markDone={markDone}
             />
           )}
-          data={tasks}
+          keyExtractor={(item, index) => index.toString()}
         />
       </View>
     </View>
